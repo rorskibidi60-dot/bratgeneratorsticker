@@ -1,6 +1,9 @@
-<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Brat Sticker Maker</title>
-<meta name="claude:viewport-fit-sides" content="cover">
 <style>
 /* Layout: satu kolom di HP, preview stiker besar di atas, kontrol di bawah. Dua kolom di layar lebar. */
 :root {
@@ -38,6 +41,7 @@
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 body {
   background: var(--bg);
   color: var(--fg);
@@ -111,7 +115,8 @@ input[type=range] { width: 100%; accent-color: #6aa000; height: 32px; }
 .note { color: var(--muted); font-size: 13px; margin: 10px 0 0; max-width: 60ch; }
 canvas { display: none; }
 </style>
-
+</head>
+<body>
 <div class="wrap">
   <header>
     <h1>brat sticker maker</h1>
@@ -136,6 +141,7 @@ canvas { display: none; }
       </div>
       <div class="row">
         <button class="btn" id="dl" type="button">Download gambar</button>
+        <button class="btn ghost" id="share" type="button" hidden>Bagikan</button>
         <button class="btn ghost" id="rand" type="button">Contoh lain</button>
       </div>
       <p class="status" id="status" role="status" aria-live="polite"></p>
@@ -257,15 +263,39 @@ canvas { display: none; }
     out.src = big.toDataURL("image/png");
   }
 
-  var FALLBACK = "Download tidak tersedia di sini. Tekan lama gambar lalu pilih Simpan gambar.";
+  var FALLBACK = "Download gagal. Tekan lama gambar lalu pilih Simpan gambar.";
+  var shareBtn = document.getElementById("share");
+  var standalone = !(window.claude && window.claude.use);
+  if (standalone && navigator.share) shareBtn.hidden = false;
+
+  function fileName() {
+    return ((txt.value || "brat").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 30) || "brat") + "-sticker.png";
+  }
+
+  function anchorSave(blob, name) {
+    try {
+      var u = URL.createObjectURL(blob);
+      var a = document.createElement("a");
+      a.href = u;
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(function () { URL.revokeObjectURL(u); }, 4000);
+      statusEl.textContent = "Gambar diunduh: " + name + ". Cek folder Download atau Galeri.";
+    } catch (e) {
+      statusEl.textContent = FALLBACK;
+    }
+  }
+
   document.getElementById("dl").addEventListener("click", function () {
     statusEl.textContent = "";
-    var name = ((txt.value || "brat").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 30) || "brat") + "-sticker.png";
-    var pending = window.claude && window.claude.use ? window.claude.use("downloads") : Promise.resolve(null);
-    pending.then(function (dl) {
-      if (!dl) { statusEl.textContent = FALLBACK; return; }
-      big.toBlob(function (blob) {
-        if (!blob) { statusEl.textContent = FALLBACK; return; }
+    var name = fileName();
+    big.toBlob(function (blob) {
+      if (!blob) { statusEl.textContent = FALLBACK; return; }
+      var pending = standalone ? Promise.resolve(null) : window.claude.use("downloads");
+      pending.then(function (dl) {
+        if (!dl) { anchorSave(blob, name); return; }
         dl.save({ filename: name, data: blob }).then(function () {
           statusEl.textContent = "Tersimpan: " + name;
         }, function (err) {
@@ -274,8 +304,24 @@ canvas { display: none; }
           else if (c === "rate_limited") statusEl.textContent = "Tunggu sebentar, lalu coba lagi.";
           else statusEl.textContent = FALLBACK;
         });
-      }, "image/png");
-    }, function () { statusEl.textContent = FALLBACK; });
+      }, function () { anchorSave(blob, name); });
+    }, "image/png");
+  });
+
+  shareBtn.addEventListener("click", function () {
+    statusEl.textContent = "";
+    var name = fileName();
+    big.toBlob(function (blob) {
+      if (!blob) { statusEl.textContent = FALLBACK; return; }
+      var f = new File([blob], name, { type: "image/png" });
+      if (navigator.canShare && navigator.canShare({ files: [f] })) {
+        navigator.share({ files: [f] }).catch(function (e) {
+          if (!e || e.name !== "AbortError") statusEl.textContent = "Berbagi gagal. Pakai Download gambar saja.";
+        });
+      } else {
+        statusEl.textContent = "Browser ini belum bisa membagikan file. Pakai Download gambar.";
+      }
+    }, "image/png");
   });
 
   document.getElementById("rand").addEventListener("click", function () {
@@ -289,5 +335,5 @@ canvas { display: none; }
   render();
 })();
 </script>
-
-</body></html>
+</body>
+</html>
